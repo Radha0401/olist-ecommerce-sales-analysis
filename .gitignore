@@ -1,0 +1,22 @@
+# Data files - CSV too large for GitHub
+data/
+*.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VS Code settings
+.vscode/
+
+# Environment
+.env
+venv/
+notebook/late_delivery_model.pkl
+notebook/late_delivery_model_smote.pkl
+*.pkl
+*.pkl
+notebook/master_olist_dataset.csv
