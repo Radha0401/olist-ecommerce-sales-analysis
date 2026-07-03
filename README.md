@@ -281,38 +281,40 @@ An interactive **6-page Power BI dashboard** was developed to transform raw busi
 **Focus:** Top-performing categories, customer rating analysis, revenue contribution
 
 ### 3️⃣ Delivery & Logistics
-**KPIs:** Late Delivery Rate · On-Time Delivery Rate · Average Delivery Days · Average Estimated Delivery Days
-**Visuals:** State-wise Delivery Analysis · Monthly Delivery Trend · On-Time vs. Late Split
+**KPIs:** Late Delivery Rate (**7.87%**) · On-Time Delivery Rate (**92.13%**) · Average Delivery Days (**12.50 days**) · Average Estimated Delivery Days
+**Visuals:** Delivery Performance by State · Monthly Delivery Trend
 **Focus:** Delivery performance, logistics efficiency, regional analysis
 
 ### 4️⃣ Customer Segmentation (RFM)
-**KPIs:** Customer Retention Rate · Customer Lifetime Value (CLV) · Champions Monetary Share · New vs. Returning Customer Revenue
-**Visuals:** Segment Distribution · Revenue by Segment · Recency–Monetary Scatter Plot
+**KPIs:** Total Customers (**96K**) · Champions Customers (**31K**) · Champions Monetary Share (**61.47%**) · Customer Retention Rate (**70.89%**) · Customer Lifetime Value (**148.64**) · New Customer Revenue (**14.59M**) · Returning Customer Revenue (**867.41K**)
+**Visuals:** Monetary Distribution by Segment · Customer Distribution by Segment · Customer RFM Distribution (Scatter) · Revenue by Segment
 **Segments:** Champions · At Risk · Recent Customers · Lost Customers
 
 ### 5️⃣ Seller Performance
-**KPIs:** Total Sellers · Seller Revenue · Seller Performance Index · Top Seller Revenue Share
-**Visuals:** Top Sellers by Revenue · Seller Revenue vs. Review Score · Seller Performance Table
+**KPIs:** Total Sellers (**3K**) · Seller Revenue (**13.59M**) · Top Seller Revenue Share (**13.15%**) · Average Seller Performance (**35.40**)
+**Visuals:** Seller Revenue vs. Review Score (Scatter) · Top Sellers by Revenue · Seller Performance Table (Seller Revenue, Seller Review Score, Seller Performance Index)
 **Focus:** Seller ranking, revenue distribution, seller quality analysis
 
 ### 6️⃣ Payment & Financial Insights
-**KPIs:** Total Revenue · Average Installments per Order · Revenue Leakage · Revenue Leakage %
-**Visuals:** Payment Method Distribution · Revenue by Payment Type · Monthly Revenue Trend · Installment Analysis
+**KPIs:** Total Revenue (**16.01M**) · Average Installments per Order (**2.85**) · Revenue Leakage Rate (**1.68%**) · Revenue Leakage (**269.74K**)
+**Visuals:** Average Installments by Payment Type · Revenue by Payment Type · Monthly Revenue Trend · Payment Method Distribution
 **Focus:** Customer payment preference, financial performance, revenue leakage analysis
 
 ---
 
 ## 📈 Advanced DAX Measures
 
-**Revenue:** Total Revenue · Revenue by Segment · Seller Revenue · Previous Month Revenue · Previous Year Revenue · Running Total Revenue
+**Revenue:** Total Revenue · Category Revenue · Previous Month Revenue · Previous Year Revenue · Running Total Revenue · MoM Revenue Growth % · YoY Revenue Growth %
 
-**Customer:** Customer Retention Rate · Customer Lifetime Value (CLV) · New Customer Revenue · Returning Customer Revenue
+**Customer:** Total Customers · Customer Retention Rate % · Customer Lifetime Value (CLV) · New Customer Revenue · Returning Customer Revenue · Repeat Customer Rate % · Champions Monetary %
 
 **Delivery:** Late Delivery Rate % · On-Time Delivery Rate % · Average Delivery Days · Average Estimated Delivery Days
 
-**Seller:** Seller Performance Index · Top Seller Revenue Share %
+**Seller:** Total Sellers · Seller Revenue · Revenue by Segment · Seller Performance Index · Average Seller Performance · Top Seller Revenue Share % · Top 10 Seller Revenue
 
-**Financial:** Average Installments per Order · Revenue Leakage · Revenue Leakage %
+**Financial:** Average Installments per Order · Revenue Leakage · Revenue Leakage % · Average Order Value
+
+**Product:** Category Review Rank
 
 ---
 
@@ -354,11 +356,13 @@ An interactive **6-page Power BI dashboard** was developed to transform raw busi
 ## 💡 Key Business Insights
 
 - 📈 Revenue grew consistently from 2016–2018, with clear seasonal peaks
-- 🏆 **Champions (33.6% of customers) drive 61.5% of revenue** — retention budget should concentrate here
-- ⚠️ **At Risk customers have the highest average order value** of any segment — proven high spenders going inactive
-- 🚚 **92.1% on-time delivery rate**; late deliveries are the single strongest driver of low review scores
-- 🛍️ Health & Beauty emerged as the highest revenue-generating product category
-- 💳 Credit card is the dominant payment method across all customer segments
+- 🏆 **Champions generate 61.47% of total revenue** (31K of 96K customers) — retention budget should concentrate here
+- 👥 **Customer Retention Rate stands at 70.89%**, with New Customer Revenue (14.59M) far outweighing Returning Customer Revenue (867.41K)
+- 🚚 **92.13% on-time delivery rate** (7.87% late), with an average delivery time of 12.50 days; late deliveries are a key driver of low review scores
+- 🛍️ **Health & Beauty** is the highest revenue-generating product category (1.26M), followed by Watches & Gifts and Bed, Bath & Table
+- 🏬 **Revenue is highly concentrated among top sellers** — the top sellers alone account for 13.15% of total seller revenue (3K sellers, 13.59M total)
+- 💳 Credit card is the dominant payment method, and most customers pay in 2–3 installments
+- 💰 Revenue leakage from cancelled/unavailable orders is minimal — just 1.68% (269.74K) of total revenue (16.01M)
 - ⭐ Delivery delay is the strongest predictor of review score, confirmed by both SQL chi-square testing and the regression model
 - 📊 Customer segmentation highlights clear opportunities for targeted retention and win-back marketing
 
@@ -426,7 +430,8 @@ Download the [Olist Brazilian E-Commerce Dataset](https://www.kaggle.com/dataset
 **Radha Yadav**
 Data Analytics | NIT Agartala
 
-📧 Email: *Add your email here*
+📧 Email: yradhaec04@gmail.com
 💼 LinkedIn: [linkedin.com/in/radha-yadav05](https://linkedin.com/in/radha-yadav05)
 💻 GitHub: [github.com/Radha0401](https://github.com/Radha0401)
 
+---
