@@ -39,17 +39,17 @@ A real analytics team at Olist would be asked to answer questions like these:
 olist-ecommerce-sales-analysis/
 │
 ├── Data/
-│   ├── raw/                            # Raw CSVs (not tracked — see Dataset section)
-│   └── clean/                          # Cleaned / processed data
+│   ├── raw/                              # Raw CSVs (not tracked — see Dataset section)
+│   └── clean/                            # Cleaned / processed data (e.g. olist_order_reviews_clean.csv)
 │
 ├── notebook/
-│   ├── 01_data_cleaning.ipynb          # Cleaning, deduplication, feature engineering
-│   ├── 02_rfm_clustering.ipynb         # K-Means customer segmentation
-│   ├── 03_machine_learning.ipynb       # Late delivery classification
-│   └── 03_review_score_regression.ipynb# Review score regression
+│   ├── 01_data_cleaning.ipynb            # Cleaning, deduplication, feature engineering
+│   ├── 02_rfm_clustering.ipynb           # RFM + K-Means customer segmentation
+│   ├── 03_machine_learning.ipynb         # Late delivery classification
+│   └── 04_review_score_regression.ipynb  # Review score regression
 │
 ├── SQL/
-│   └── olist_ecommerce_analysis.sql    # Schema, 20+ queries, views, function, trigger
+│   └── olist_ecommerce_analysis.sql      # Schema, 20+ queries, views, function, trigger
 │
 ├── power_bi/
 │   ├── Olist_Ecommerce_Sales_Dashboard.pbix
@@ -60,12 +60,17 @@ olist-ecommerce-sales-analysis/
 │   ├── seller performance.png
 │   └── payment and financial.png
 │
-├── models/                             # Saved .pkl models
+├── models/                               # Saved .pkl models (late_delivery_model_smote.pkl, review_score_model.pkl)
+├── order_review_correction.py            # Standalone script: dedupes review records
 ├── requirements.txt
 ├── .gitignore
 ├── LICENSE
 └── README.md
 ```
+
+> **Note:** `Data/raw/`, `Data/clean/`, and `models/` are created when you run the
+> notebooks/scripts locally — they're not pre-populated in the repo since the raw
+> CSVs and trained model files are too large to track in Git.
 
 ---
 
@@ -141,7 +146,7 @@ The Olist dataset was imported into PostgreSQL and modeled using a normalized 9-
 - `GROUP BY` & `HAVING`
 - Aggregate Functions
 - Common Table Expressions (CTEs)
-- Window Functions (`LAG`, `RANK`, running totals)
+- Window Functions (`LAG`, `RANK`, `NTILE`, `ROW_NUMBER`, running totals)
 - `CASE WHEN`
 - Views
 - Indexes (with `EXPLAIN ANALYZE`)
@@ -173,7 +178,7 @@ The Olist dataset was imported into PostgreSQL and modeled using a normalized 9-
 Python was used for data cleaning, exploratory data analysis (EDA), feature engineering, visualization, and machine learning model development.
 
 ### Data Cleaning
-- Removed **814 duplicate `review_id` records** (kept the latest by timestamp)
+- Removed **814 duplicate `review_id` records** (kept the latest by timestamp) — see `order_review_correction.py` and `notebook/01_data_cleaning.ipynb`
 - Handled missing values
 - Corrected data types
 - Built a master analytical dataset from the 9 raw tables
@@ -208,15 +213,36 @@ Three machine learning solutions were developed as part of this project.
 
 **Objective:** Predict which orders will arrive late, to enable proactive logistics flagging.
 
-**Workflow:** Data preprocessing → feature engineering → class balancing → model training → evaluation
+**Challenge:** Severe class imbalance — only **6.3%** of orders are late. A naive
+model that always predicts "on-time" already scores 93.7% accuracy while catching
+zero late deliveries, so accuracy alone is a misleading metric here. The model was
+evaluated on Precision, Recall, F1, and ROC-AUC instead.
 
-**Algorithms tested:** Logistic Regression, Random Forest
+**Workflow:** Preprocessing → baseline models → hyperparameter tuning (GridSearchCV)
+→ class balancing (SMOTE) → decision-threshold tuning
 
-**Challenge discovered:** Severe class imbalance (~7% of orders are late) caused a 94% "accuracy" baseline to hide a recall of just **8.7%** — a classic accuracy paradox.
+**Results:**
 
-**Fix:** Applied SMOTE oversampling and tuned hyperparameters via `RandomizedSearchCV` → recall improved **3x (8.7% → 24.7%)**.
+| Model | Precision | Recall | F1 Score | ROC-AUC |
+|---|---|---|---|---|
+| Logistic Regression (baseline) | 0.00 | 0.000 | 0.000 | 0.655 |
+| Random Forest (baseline) | 1.00 | 0.003 | 0.005 | 0.671 |
+| Random Forest (GridSearch-tuned) | 0.83 | 0.087 | 0.158 | 0.730 |
+| Random Forest + SMOTE | 0.138 | 0.247 | 0.177 | 0.654 |
+| **Tuned RF + threshold = 0.35 (final)** | **0.644** | **0.164** | **0.261** | **0.730** |
 
-**Result:** Random Forest, **ROC-AUC 0.65**, deployed as an early-warning filter (not a standalone decision-maker).
+**Key finding:** Both baseline models default to predicting "on-time" for every
+order, since the standard 0.5 decision threshold is unsuitable for a 6.3% minority
+class. Adjusting the decision threshold to 0.35 on the GridSearch-tuned Random
+Forest produced the best precision–recall trade-off (F1 = 0.261), while SMOTE-based
+rebalancing traded precision for higher recall (catching more true late orders at
+the cost of more false alarms). `price`, `freight_value`, `product_weight_g`, and
+`order_hour` were the strongest predictors of a late delivery.
+
+**Business takeaway:** At F1 ≈ 0.26, this model is not yet reliable enough for fully
+automated action, but at threshold 0.35 it flags late orders with **64% precision**
+— usable today as a secondary risk signal to help logistics teams prioritize manual
+review of high-risk orders, rather than as a standalone automated decision-maker.
 
 ### 2️⃣ Customer Segmentation (RFM + K-Means)
 
@@ -239,6 +265,11 @@ A regression model was developed to predict customer review scores.
 
 - **Random Forest Regressor: R² = 0.172** (vs. 0.075 for Linear Regression)
 - `delivery_delay_days` is by far the strongest predictor — confirming the SQL chi-square finding
+- **Limitation:** R² of 0.172 means most of the variance in review scores is driven
+  by factors not captured in this dataset (product quality, packaging condition,
+  subjective customer expectations). This is expected — review scores are
+  inherently subjective and can't be fully predicted from structured transactional
+  data alone.
 
 📄 Notebooks: [`notebook/`](notebook/)
 
@@ -270,7 +301,7 @@ A regression model was developed to predict customer review scores.
 
 ## 📊 Power BI Dashboard
 
-An interactive **6-page Power BI dashboard** was developed to transform raw business data into actionable insights, featuring dynamic KPIs, advanced DAX measures, slicers, drill-down analysis, and business insight panels.
+An interactive **6-page Power BI dashboard** was developed to transform raw business data into actionable insights, featuring dynamic KPIs, DAX measures, slicers, and business insight panels.
 
 ### 1️⃣ Executive Summary
 **KPIs:** Total Revenue · Total Orders · Total Customers · Average Order Value (AOV) · Average Review Score
@@ -302,7 +333,7 @@ An interactive **6-page Power BI dashboard** was developed to transform raw busi
 
 ---
 
-## 📈 Advanced DAX Measures
+## 📈 DAX Measures
 
 **Revenue:** Total Revenue · Category Revenue · Previous Month Revenue · Previous Year Revenue · Running Total Revenue · MoM Revenue Growth % · YoY Revenue Growth %
 
@@ -322,12 +353,10 @@ An interactive **6-page Power BI dashboard** was developed to transform raw busi
 
 - Interactive Slicers
 - Dynamic KPI Cards
-- Time Intelligence Analysis
-- Drill-down Visualizations
+- Time Intelligence Analysis (MoM / YoY DAX measures)
 - Custom DAX Measures
-- Business Insight Panels
-- Responsive Dashboard Layout
-- Professional Business Reporting
+- Business Insight Panels on every page
+- Consistent Visual Theme Across Pages
 
 ---
 
@@ -364,6 +393,7 @@ An interactive **6-page Power BI dashboard** was developed to transform raw busi
 - 💳 Credit card is the dominant payment method, and most customers pay in 2–3 installments
 - 💰 Revenue leakage from cancelled/unavailable orders is minimal — just 1.68% (269.74K) of total revenue (16.01M)
 - ⭐ Delivery delay is the strongest predictor of review score, confirmed by both SQL chi-square testing and the regression model
+- 🎯 The late-delivery model works best as a risk-prioritization signal (64% precision at threshold 0.35), not a fully automated flag
 - 📊 Customer segmentation highlights clear opportunities for targeted retention and win-back marketing
 
 ---
@@ -372,9 +402,9 @@ An interactive **6-page Power BI dashboard** was developed to transform raw busi
 
 **SQL:** Advanced Joins · CTEs · Window Functions · Views · Stored Procedures/Functions · Triggers · Business KPI Analysis
 
-**Python:** Data Cleaning · Exploratory Data Analysis · Feature Engineering · Machine Learning · Statistical Testing · Data Visualization
+**Python:** Data Cleaning · Exploratory Data Analysis · Feature Engineering · Machine Learning · Handling Class Imbalance (SMOTE, threshold tuning) · Statistical Testing · Data Visualization
 
-**Power BI:** Interactive Dashboards · Advanced DAX · KPI Reporting · Drill-down Analysis · Business Storytelling
+**Power BI:** Interactive Dashboards · DAX Measures · KPI Reporting · Business Storytelling
 
 **Business Analytics:** Revenue Analysis · Customer Analytics · Seller Analytics · Delivery Analytics · Financial Analytics
 
@@ -409,7 +439,7 @@ Download the [Olist Brazilian E-Commerce Dataset](https://www.kaggle.com/dataset
 
 ### 4. Execute the Project
 - Run the SQL scripts in PostgreSQL (`SQL/olist_ecommerce_analysis.sql`)
-- Run the notebooks in sequence: `01 → 02 → 03`
+- Run the notebooks in sequence: `01 → 02 → 03 → 04`
 - Open the dashboard: `power_bi/Olist_Ecommerce_Sales_Dashboard.pbix` in Power BI Desktop
 
 ---
@@ -417,6 +447,7 @@ Download the [Olist Brazilian E-Commerce Dataset](https://www.kaggle.com/dataset
 ## 🎯 Future Improvements
 
 - Deploy the late-delivery model as a live API (FastAPI + Docker)
+- Improve recall further with cost-sensitive learning or ensemble stacking
 - Real-time dashboard integration
 - Time-series revenue forecasting (Prophet/ARIMA)
 - Customer churn prediction
