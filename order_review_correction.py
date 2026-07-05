@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Read CSV
-file_path = r"C:\Users\yradh\OneDrive\Desktop\e-commerce project\olist_order_reviews_dataset.csv"
+file_path = "Data/raw/olist_order_reviews_dataset.csv"
 
 df = pd.read_csv(file_path)
 
