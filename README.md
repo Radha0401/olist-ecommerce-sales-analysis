@@ -61,7 +61,6 @@ olist-ecommerce-sales-analysis/
 │   └── payment and financial.png
 │
 ├── models/                               # Saved .pkl models (late_delivery_model_smote.pkl, review_score_model.pkl)
-├── order_review_correction.py            # Standalone script: dedupes review records
 ├── requirements.txt
 ├── .gitignore
 ├── LICENSE
