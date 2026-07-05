@@ -1,0 +1,385 @@
+# %% [markdown]
+# # Late Delivery Prediction — Classification Model
+# 
+# **Objective:** Predict which orders will arrive late, enabling proactive 
+# logistics flagging before delivery. This model uses order-level features 
+# available at the time of purchase (price, freight, category, location, 
+# order timing) to classify orders as at-risk of late delivery.
+
+# %%
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    roc_auc_score, ConfusionMatrixDisplay, RocCurveDisplay,
+    precision_recall_curve
+)
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline as ImbPipeline
+import shap
+import joblib
+
+print("Libraries loaded ✅")
+
+# %% [markdown]
+# ## 1. Load Data
+
+# %%
+master_df = pd.read_csv("master_olist_dataset.csv")
+master_df.head()
+
+# %% [markdown]
+# ## 2. Feature Selection
+# 
+# Using only features available at order time (no data leakage from 
+# post-delivery information).
+
+# %%
+features = [
+    "price", "freight_value", "payment_type",
+    "seller_state", "customer_state",
+    "product_category_name_english",
+    "product_weight_g", "order_hour", "is_weekend"
+]
+target = "is_late_delivery"
+
+df = master_df[features + [target]].copy()
+df.head()
+
+# %%
+X = df.drop(columns=target)
+y = df[target]
+
+categorical_features = [
+    "payment_type", "seller_state", "customer_state",
+    "product_category_name_english"
+]
+numeric_features = [
+    "price", "freight_value", "product_weight_g",
+    "order_hour", "is_weekend"
+]
+
+print("Class distribution:")
+print(y.value_counts(normalize=True).round(3))
+
+# %% [markdown]
+# ## 3. Preprocessing Pipeline
+
+# %%
+numeric_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="median"))
+])
+
+categorical_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("encoder", OneHotEncoder(handle_unknown="ignore"))
+])
+
+preprocessor = ColumnTransformer(transformers=[
+    ("num", numeric_transformer, numeric_features),
+    ("cat", categorical_transformer, categorical_features)
+])
+
+print("Preprocessor ready ✅")
+
+# %% [markdown]
+# ## 4. Train/Test Split
+
+# %%
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.20, random_state=42, stratify=y
+)
+
+print("Train shape:", X_train.shape)
+print("Test shape :", X_test.shape)
+
+# %% [markdown]
+# ## 5. Baseline Model — Logistic Regression
+
+# %%
+lr_pipeline = Pipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("classifier", LogisticRegression(max_iter=1000, random_state=42))
+])
+
+lr_pipeline.fit(X_train, y_train)
+
+y_pred = lr_pipeline.predict(X_test)
+y_prob = lr_pipeline.predict_proba(X_test)[:, 1]
+
+print("Logistic Regression Results")
+print("Accuracy :", round(accuracy_score(y_test, y_pred), 3))
+print("Precision:", round(precision_score(y_test, y_pred), 3))
+print("Recall   :", round(recall_score(y_test, y_pred), 3))
+print("F1 Score :", round(f1_score(y_test, y_pred), 3))
+print("ROC-AUC  :", round(roc_auc_score(y_test, y_prob), 3))
+
+# %%
+ConfusionMatrixDisplay.from_predictions(y_test, y_pred, cmap="Blues")
+plt.title("Logistic Regression — Confusion Matrix")
+plt.show()
+
+# %% [markdown]
+# ## 6. Baseline Model — Random Forest
+
+# %%
+rf_pipeline = Pipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("classifier", RandomForestClassifier(
+        n_estimators=100, max_depth=10, random_state=42, n_jobs=-1
+    ))
+])
+
+rf_pipeline.fit(X_train, y_train)
+
+y_pred_rf = rf_pipeline.predict(X_test)
+y_prob_rf = rf_pipeline.predict_proba(X_test)[:, 1]
+
+print("Random Forest (baseline) Results")
+print("Accuracy :", round(accuracy_score(y_test, y_pred_rf), 3))
+print("Precision:", round(precision_score(y_test, y_pred_rf), 3))
+print("Recall   :", round(recall_score(y_test, y_pred_rf), 3))
+print("F1 Score :", round(f1_score(y_test, y_pred_rf), 3))
+print("ROC-AUC  :", round(roc_auc_score(y_test, y_prob_rf), 3))
+
+# %% [markdown]
+# **Key observation:** Despite ~94% accuracy, recall is very low. With 
+# only ~7% of orders being late, a model that predicts "on-time" for 
+# almost everything still scores high on accuracy while catching almost 
+# no actual late deliveries. This is a class imbalance problem — 
+# addressed with hyperparameter tuning and SMOTE below.
+
+# %% [markdown]
+# ## 7. Hyperparameter Tuning (RandomizedSearchCV on a sample for speed)
+
+# %%
+sample_size = min(20000, len(X_train))
+X_train_sample = X_train.sample(n=sample_size, random_state=42)
+y_train_sample = y_train.loc[X_train_sample.index]
+
+rf_param_dist = {
+    "classifier__n_estimators": [100, 150, 200],
+    "classifier__max_depth": [10, 15, 20, None],
+    "classifier__min_samples_split": [2, 5, 10]
+}
+
+rf_search = RandomizedSearchCV(
+    rf_pipeline,
+    param_distributions=rf_param_dist,
+    n_iter=6,
+    cv=3,
+    scoring="f1",
+    n_jobs=-1,
+    random_state=42,
+    verbose=1
+)
+
+rf_search.fit(X_train_sample, y_train_sample)
+
+print("Best RF Parameters:", rf_search.best_params_)
+print("Best RF CV F1 Score:", round(rf_search.best_score_, 3))
+
+# %% [markdown]
+# ## 8. Final Model — Random Forest (tuned, trained on full data)
+
+# %%
+best_params = rf_search.best_params_
+
+best_rf = Pipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("classifier", RandomForestClassifier(
+        n_estimators=best_params["classifier__n_estimators"],
+        max_depth=best_params["classifier__max_depth"],
+        min_samples_split=best_params["classifier__min_samples_split"],
+        random_state=42,
+        n_jobs=-1
+    ))
+])
+
+best_rf.fit(X_train, y_train)
+
+y_pred_final = best_rf.predict(X_test)
+y_prob_final = best_rf.predict_proba(X_test)[:, 1]
+
+print("Final Random Forest Results")
+print("Accuracy :", round(accuracy_score(y_test, y_pred_final), 3))
+print("Precision:", round(precision_score(y_test, y_pred_final), 3))
+print("Recall   :", round(recall_score(y_test, y_pred_final), 3))
+print("F1 Score :", round(f1_score(y_test, y_pred_final), 3))
+print("ROC-AUC  :", round(roc_auc_score(y_test, y_prob_final), 3))
+
+# %%
+ConfusionMatrixDisplay.from_predictions(y_test, y_pred_final, cmap="Greens")
+plt.title("Final Random Forest — Confusion Matrix")
+plt.show()
+
+# %% [markdown]
+# ## 9. Model Comparison
+
+# %%
+comparison = pd.DataFrame({
+    "Model": ["Logistic Regression", "Random Forest (tuned)"],
+    "Accuracy": [accuracy_score(y_test, y_pred), accuracy_score(y_test, y_pred_final)],
+    "Precision": [precision_score(y_test, y_pred), precision_score(y_test, y_pred_final)],
+    "Recall": [recall_score(y_test, y_pred), recall_score(y_test, y_pred_final)],
+    "F1 Score": [f1_score(y_test, y_pred), f1_score(y_test, y_pred_final)],
+    "ROC-AUC": [roc_auc_score(y_test, y_prob), roc_auc_score(y_test, y_prob_final)]
+}).round(3)
+
+print(comparison)
+
+# %%
+fig, ax = plt.subplots(figsize=(7, 6))
+RocCurveDisplay.from_estimator(lr_pipeline, X_test, y_test, ax=ax, name="Logistic Regression")
+RocCurveDisplay.from_estimator(best_rf, X_test, y_test, ax=ax, name="Random Forest (tuned)")
+plt.plot([0, 1], [0, 1], linestyle="--", color="gray")
+plt.title("ROC Curve Comparison")
+plt.show()
+
+# %% [markdown]
+# ## 10. Addressing Class Imbalance — SMOTE
+# 
+# Since tuning alone did not meaningfully improve recall, SMOTE 
+# (Synthetic Minority Oversampling) is applied to the training data to 
+# rebalance the classes before fitting the classifier.
+
+# %%
+rf_pipeline_smote = ImbPipeline(steps=[
+    ("preprocessor", preprocessor),
+    ("smote", SMOTE(random_state=42)),
+    ("classifier", RandomForestClassifier(
+        n_estimators=100, max_depth=10, random_state=42, n_jobs=-1
+    ))
+])
+
+rf_pipeline_smote.fit(X_train, y_train)
+
+y_pred_smote = rf_pipeline_smote.predict(X_test)
+y_prob_smote = rf_pipeline_smote.predict_proba(X_test)[:, 1]
+
+print("SMOTE Random Forest Results")
+print("Accuracy :", round(accuracy_score(y_test, y_pred_smote), 3))
+print("Precision:", round(precision_score(y_test, y_pred_smote), 3))
+print("Recall   :", round(recall_score(y_test, y_pred_smote), 3))
+print("F1 Score :", round(f1_score(y_test, y_pred_smote), 3))
+print("ROC-AUC  :", round(roc_auc_score(y_test, y_prob_smote), 3))
+
+# %%
+ConfusionMatrixDisplay.from_predictions(y_test, y_pred_smote, cmap="Oranges")
+plt.title("SMOTE Random Forest — Confusion Matrix")
+plt.show()
+
+# %% [markdown]
+# **Result:** SMOTE improved recall from 0.087 (baseline tuned model) to 
+# 0.247 — nearly 3x better at catching actual late deliveries — at the 
+# cost of precision dropping from 0.83 to 0.138. This is treated as the 
+# **final model**, since for this business problem, catching more at-risk 
+# orders is more valuable than avoiding false alarms.
+
+# %% [markdown]
+# ## 11. Threshold Tuning (Precision-Recall Trade-off)
+
+# %%
+precisions, recalls, thresholds = precision_recall_curve(y_test, y_prob_final)
+
+plt.figure(figsize=(7, 5))
+plt.plot(thresholds, precisions[:-1], label="Precision")
+plt.plot(thresholds, recalls[:-1], label="Recall")
+plt.xlabel("Threshold")
+plt.ylabel("Score")
+plt.title("Precision-Recall vs Threshold")
+plt.legend()
+plt.show()
+
+# %%
+custom_threshold = 0.35
+y_pred_custom = (y_prob_final >= custom_threshold).astype(int)
+
+print(f"At threshold={custom_threshold}:")
+print("Precision:", round(precision_score(y_test, y_pred_custom), 3))
+print("Recall   :", round(recall_score(y_test, y_pred_custom), 3))
+print("F1 Score :", round(f1_score(y_test, y_pred_custom), 3))
+
+# %% [markdown]
+# ## 12. Feature Importance
+
+# %%
+ohe_columns = best_rf.named_steps["preprocessor"]\
+    .named_transformers_["cat"].named_steps["encoder"]\
+    .get_feature_names_out(categorical_features)
+
+all_feature_names = numeric_features + list(ohe_columns)
+importances = best_rf.named_steps["classifier"].feature_importances_
+
+feat_imp_df = pd.DataFrame({
+    "feature": all_feature_names,
+    "importance": importances
+}).sort_values("importance", ascending=False).head(15)
+
+plt.figure(figsize=(8, 6))
+sns.barplot(data=feat_imp_df, x="importance", y="feature", palette="viridis")
+plt.title("Top 15 Feature Importances — Late Delivery Prediction")
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## 13. Model Explainability — SHAP
+
+# %%
+X_sample = X_test.sample(50, random_state=42)
+X_sample_processed = best_rf.named_steps["preprocessor"].transform(X_sample)
+
+if hasattr(X_sample_processed, "toarray"):
+    X_sample_processed = X_sample_processed.toarray()
+
+explainer = shap.TreeExplainer(best_rf.named_steps["classifier"])
+shap_values = explainer.shap_values(X_sample_processed, check_additivity=False)
+
+shap.summary_plot(
+    shap_values[1] if isinstance(shap_values, list) else shap_values,
+    X_sample_processed,
+    feature_names=all_feature_names,
+    show=True
+)
+
+# %% [markdown]
+# ## 14. Save Final Model
+
+# %%
+joblib.dump(rf_pipeline_smote, "late_delivery_model_smote.pkl")
+print("Final model saved as late_delivery_model_smote.pkl ✅")
+
+# %% [markdown]
+# ## 15. Business Interpretation
+# 
+# **1. Class imbalance discovery:** The baseline Random Forest had high 
+# precision (0.83) but very low recall (0.087) despite 94.1% accuracy — 
+# a classic "accuracy paradox" caused by severe class imbalance 
+# (~7% of orders are late). High accuracy alone was misleading; the model 
+# was essentially always predicting "on-time."
+# 
+# **2. Fix applied:** SMOTE oversampling improved recall to 0.247 
+# (nearly 3x better) at the cost of precision dropping to 0.138. This is 
+# an accepted trade-off — for this business problem, catching more 
+# at-risk orders matters more than avoiding some false alarms.
+# 
+# **3. Limitation:** Available features (price, freight, category, state) 
+# have only moderate predictive power for delivery delays (ROC-AUC ≈ 0.65). 
+# Stronger predictors — real-time courier capacity, traffic, or warehouse 
+# processing time — are not available in this dataset. This model should 
+# **not** be treated as production-ready in isolation.
+# 
+# **4. Recommendation:** Use this model as an early-warning filter — 
+# flagging the highest-risk orders (e.g., top 25% by predicted 
+# probability) for manual logistics review, rather than as a standalone 
+# automated decision-maker.
