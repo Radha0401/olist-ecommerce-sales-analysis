@@ -177,7 +177,7 @@ The Olist dataset was imported into PostgreSQL and modeled using a normalized 9-
 Python was used for data cleaning, exploratory data analysis (EDA), feature engineering, visualization, and machine learning model development.
 
 ### Data Cleaning
-- Removed **814 duplicate `review_id` records** (kept the latest by timestamp) — see `order_review_correction.py` and `notebook/01_data_cleaning.ipynb`
+- Removed **814 duplicate `review_id` records** (kept the latest by timestamp) — see `notebook/01_data_cleaning.ipynb`
 - Handled missing values
 - Corrected data types
 - Built a master analytical dataset from the 9 raw tables
